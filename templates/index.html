@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Análisis de Balance de Flujo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Fuentes y Estilos -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <!-- Choices.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+
+    <!-- Choices.js JS -->
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+</head>
+<body>
+
+    <!-- =========================================================
+         ENCABEZADO
+    ========================================================== -->          
+
+    <!-- =========================================================
+         CONTENIDO PRINCIPAL: CONFIGURACIÓN + RESULTADOS
+    ========================================================== -->
+    <main class="main-layout">
+
+        <!-- =======================
+             PANEL DE CONFIGURACIÓN
+        ======================== -->
+        <section class="card panel-opciones">
+            <h2 class="section-title">Settings</h2>
+
+            <label class="field-label" for="rxns_s">Objective function:</label>
+            
+            <select id="rxns_s">
+                {% for rxn in reacciones %}
+                    <option value="{{ rxn }}">{{ rxn }}</option>
+                {% endfor %}
+            </select>
+
+
+            <!-- SUBIR MODELO -->
+            <label class="field-label">Upload model (.mat / .xml / .json)</label>
+            <label for="modeloFile" id="customFileBtn">📁 Select model</label>
+            <input type="file" id="modeloFile" accept=".mat,.xml,.json">
+
+            <div id="fileName" style="margin-top: 6px; font-size: 13px; color:#475569;">
+                No files selected
+            </div>
+
+
+            <button id="btnCalcular">Calculate FBA</button>
+            <button id="btnDescargarExcel" class="excel-btn">Download Excel</button>
+
+            <!-- 🔥 NUEVO: BOTÓN DEL GRAFO 3D -->
+            <button id="btnGrafo" class="excel-btn" disabled>show 3D graph</button>
+            <button id="btnGrafoAlt" class="excel-btn" disabled>show 3D graph s x s</button>
+
+
+        </section>
+
+        <!-- =======================
+             PANEL DE RESULTADOS
+        ======================== -->
+        <section class="card panel-grafica">
+            <h2 class="section-title">Results</h2>
+
+            <!-- GRÁFICA DE FLUJOS -->
+            <div id="grafica" class="grafica"></div>
+
+            <!-- AVISOS -->
+            <div id="warnings_box" class="warnings-box" style="display:none;"></div>
+        </section>
+
+    </main>
+
+    <!-- =========================================================
+         PANEL KPI — INDICADORES METABÓLICOS
+    ========================================================== -->
+    <section class="card panel-kpi">
+        <h2 class="section-title">Model indicators</h2>
+
+        <div class="kpi-grid">
+
+            <!-- KPI: Gauge del valor objetivo -->
+            <div class="kpi-item gauge-box">
+                <div id="objective_gauge" class="gauge"></div>
+            </div>
+
+            <!-- KPI: Biomasa -->
+
+            <div class="kpi-grid2"></div>
+
+                <!-- KPI: Restricciones aplicadas -->
+                <div class="kpi-item">
+                    <div class="kpi-label">Applied constraints</div>
+                    <div id="kpi_restricciones" class="kpi-value">—</div>
+                </div>
+
+                <!-- KPI: Actividad metabólica total -->
+                <div class="kpi-item">
+                    <div class="kpi-label">Metabolic activity</div>
+                    <div id="kpi_flujo_total" class="kpi-value">—</div>
+                </div>
+
+                <!-- KPI: Reacciones activas -->
+                <div class="kpi-item">
+                    <div class="kpi-label">Active reactions</div>
+                    <div id="kpi_activas" class="kpi-value">—</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- KPI: Estado metabólico -->
+        <div id="kpi_estado" class="kpi-estado">—</div>
+    </section>
+
+    <!-- =========================================================
+         PANEL DE RESTRICCIONES
+    ========================================================== -->
+    <section class="card panel-restricciones">
+        <h2 class="section-title">Model constraints</h2>
+
+        <div class="restriccion-grid">
+
+            <div class="field-group">
+                <label class="field-label" for="rxns_res">Reaction</label>
+                <select id="rxns_res">
+                    {% for rxn in reacciones %}
+                        <option value="{{ rxn }}">{{ rxn }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="limites">Limit</label>
+                <select id="limites">
+                    <option value="upper">UpperBound</option>
+                    <option value="lower">LowerBound</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="numero">Value</label>
+                <input type="number" id="numero" value="0">
+            </div>
+
+        </div>
+
+        <!-- BOTONES DE RESTRICCIONES -->
+        <div class="botones-restriccion">
+            <button onclick="agregarFila()">Add</button>
+            <button onclick="borrarFila()">Clear selection</button>
+            <button onclick="borrarTodas()">Delete all</button>
+        </div>
+
+        <h3 class="subtitulo-tabla">List of constraints</h3>
+
+        <div class="table-container">
+            <table id="tabla">
+                <thead>
+                    <tr>
+                        <th>Reaction</th>
+                        <th>Limit</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla_body">
+                    <!-- Filas agregadas por JS -->
+                </tbody>
+            </table>
+        </div>
+
+    </section>
+
+    <!-- JS -->
+    <script>
+    // Si venimos desde el grafo: resetear UI
+        if (sessionStorage.getItem("resetUI") === "1") {
+            if (typeof resetUICompleta === "function") {
+                resetUICompleta();
+            }
+            sessionStorage.removeItem("resetUI");
+        }
+    </script>
+
+    <script src="{{ url_for('static', filename='js/funcionalidad.js') }}"></script>
+
+
+        <div id="overlayCarga">
+        <div class="cargador"></div>
+        <div id="mensajeCarga" style="margin-top: 15px; font-size: 18px; font-weight: 500;">
+            Processing...
+        </div>
+    </div>
+
+
+</body>
+</html>
